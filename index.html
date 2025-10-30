@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>EaseAI - Ekstrak Tabel AI</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script async src="https://docs.opencv.org/4.9.0/opencv.js" type="text/javascript"></script>
+ 
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary: #0b3d91;
+      --primary-600: #0a357f;
+      --accent: #24c0d4;
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --muted: #6b7280;
+      --glass: rgba(255,255,255,0.55);
+      --radius: 12px;
+      --shadow-sm: 0 6px 18px rgba(11,61,145,0.06);
+      --shadow-md: 0 14px 40px rgba(11,61,145,0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html,body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #e9f0ff 0%, var(--bg) 100%);
+      color: #0f1724;
+    }
+
+    .app { display: grid; grid-template-columns: 260px 1fr; gap: 20px; padding: 24px; min-height: 100vh; }
+    .sidebar { background: linear-gradient(180deg, rgba(255,255,255,0.98), var(--card)); border-radius: calc(var(--radius) + 6px); padding: 18px; box-shadow: var(--shadow-md); border: 1px solid rgba(11,61,145,0.04); }
+    .brand { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+    .logo { width:48px; height:48px; border-radius:10px; background: linear-gradient(135deg, var(--primary), var(--primary-600)); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:18px; box-shadow: var(--shadow-sm); }
+    .sidebar .section-title { margin-top:14px; margin-bottom:8px; color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.6px; }
+    .setting { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .small-btn { padding:8px 10px; border-radius:8px; background:transparent; border:1px solid rgba(11,61,145,0.06); color:var(--primary); cursor:pointer; font-weight:600; }
+
+    .main { width:100%; max-width:1200px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,0.98), var(--card)); border-radius: calc(var(--radius) + 4px); padding: 18px; box-shadow: var(--shadow-md); border: 1px solid rgba(11,61,145,0.04); }
+
+    .btn { padding:10px 16px; background: linear-gradient(180deg, var(--primary-600), var(--primary)); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight:600; box-shadow: var(--shadow-sm); transition: transform .12s ease; }
+    .btn.ghost { background: transparent; color: var(--primary); border: 1px solid rgba(11,61,145,0.08); box-shadow: none; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn:hover:not(:disabled) { transform: translateY(-3px); }
+
+    .media { display:grid; grid-template-columns: 1fr 360px; gap: 16px; align-items:start; margin-top:12px; }
+    video, img, canvas { width:100%; border-radius:10px; box-shadow: var(--shadow-sm); border: 1px solid rgba(11,61,145,0.04); background: #eaf2ff; }
+    #preview { max-height:360px; object-fit:contain; }
+
+    .tabs { display:flex; gap:8px; align-items:center; }
+    .tab { padding:8px 12px; border-radius:10px; background: transparent; color:var(--primary); font-weight:600; border:1px solid transparent; cursor:pointer; transition: all .12s ease; }
+    .tab.active { background: linear-gradient(90deg, var(--primary-600), var(--primary)); color:#fff; box-shadow: var(--shadow-sm); border-color: rgba(255,255,255,0.06); }
+
+    .manual-card { margin-top:14px; display:flex; gap:12px; align-items:flex-start; flex-wrap:wrap; }
+    .manual-card textarea, .manual-card input[type="text"] { width:100%; min-height:120px; padding:12px; border-radius:10px; border:1px solid rgba(11,61,145,0.08); background: linear-gradient(180deg,#fff,#fbfcff); }
+    .manual-actions { display:flex; gap:8px; margin-top:8px; }
+
+    pre#output { background: linear-gradient(180deg,#fff, #fbfcff); border:1px solid rgba(11,61,145,0.04); padding:14px; border-radius:10px; color:#0b1725; max-height:300px; overflow:auto; margin-top:12px; white-space:pre-wrap; }
+    #canvasTable { border: 2px dashed rgba(11,61,145,0.08); margin-top:10px; border-radius:8px; max-width:100%; background: #fff; }
+    #loading { color: var(--primary); font-weight:600; font-size:13px; margin-top:8px; }
+    .hint { color:var(--muted); font-size:13px; margin:8px 0 0; }
+
+    @media (max-width:1024px){ .app { grid-template-columns: 1fr; padding:18px; } .media { grid-template-columns: 1fr; } .sidebar { order: 2; } .main { order: 1; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar card" aria-label="Sidebar">
+      <div class="brand">
+        <div class="logo">EA</div>
+        <div>
+          <h1>EaseAI</h1>
+          <p>Ekstrak Tabel AI</p>
+        </div>
+      </div>
+
+      <div class="section-title">Pengaturan</div>
+      <div class="setting">
+        <div style="font-size:13px; color:var(--muted)">Min Confidence</div>
+        <div>
+          <input id="minConfidence" type="range" min="0" max="100" value="40">
+          <div style="font-size:12px; color:var(--muted); text-align:right;" id="confLabel">40%</div>
+        </div>
+      </div>
+
+      <div class="section-title">Aksi Cepat</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btnReset" class="small-btn">Reset</button>
+        <button id="btnHelp" class="small-btn">Bantuan</button>
+      </div>
+
+      <div style="margin-top:14px; font-size:13px; color:var(--muted)">Versi: 1.0</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div style="display:flex; gap:12px; align-items:center;">
+          <div style="font-weight:700; color:var(--primary);">Scan Kamera / Input Manual</div>
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div class="tabs" role="tablist" aria-label="Mode">
+            <button id="tabCamera" class="tab active" role="tab">Scan Kamera</button>
+            <button id="tabManual" class="tab" role="tab">Input Manual</button>
+          </div>
+        </div>
+      </div>
+
+      <section class="card">
+        <!-- CAMERA SECTION -->
+        <div id="cameraSection">
+          <div class="media">
+            <div>
+              <video id="camera" autoplay playsinline></video>
+              <p class="hint">Arahkan kamera ke tabel.</p>
+
+              <div style="margin-top:10px; display:flex; gap:8px;">
+                <!-- Two buttons only: capture and combined-extract -->
+                <button class="btn" id="captureBtn">Ambil Foto</button>
+                <button class="btn" id="processCombinedBtn" disabled>Ekstrak (OCR + Garis)</button>
+              </div>
+
+              <div id="loading"></div>
+              <pre id="output"></pre>
+            </div>
+
+            <div>
+              <canvas id="snapshot" style="display:none;"></canvas>
+              <img id="preview" alt="Preview" style="display:none; margin-top:6px; border-radius:8px;">
+              <canvas id="canvasTable" style="display:none; margin-top:8px;"></canvas>
+
+              <div class="info">
+                <div id="statsText"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MANUAL SECTION -->
+        <div id="manualSection" style="display:none;">
+          <div class="manual-card">
+            <div style="flex:1 1 60%;">
+              <label style="font-weight:600; color:var(--primary);">Judul Data (opsional)</label>
+              <input id="manualTitle" type="text" placeholder="Judul Data (contoh: Data Nilai Siswa)" />
+
+              <label style="display:block; margin-top:10px; font-weight:600; color:var(--primary);">Input Manual (baris per baris)</label>
+              <textarea id="manualInput" placeholder="Contoh:
+Nama Nilai
+Andi 80
+Budi 90
+Citra 70"></textarea>
+
+              <div class="manual-actions">
+                <button class="btn" id="manualDownloadBtn" disabled>Download Excel</button>
+                <button class="btn ghost" id="processManualBtn">Proses Manual</button>
+                <button class="btn ghost" id="clearManualBtn">Bersihkan</button>
+              </div>
+              <div style="font-size:13px; color:var(--muted); margin-top:8px;">
+                Masukkan satu data per baris. Gunakan spasi atau tab untuk memisahkan kolom.
+              </div>
+            </div>
+
+            <div style="flex:1 1 35%;">
+              <div style="font-weight:600; color:var(--muted); margin-bottom:8px;">Preview/Instruksi</div>
+              <div style="background:var(--glass); padding:10px; border-radius:8px; color:var(--muted); font-size:13px;">
+                Input manual berguna untuk data yang sudah diketik atau disalin. Tekan "Proses Manual" lalu gunakan tombol unduh di sini.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section id="chartContainer" class="card" style="display:none;">
+        <h3 style="margin:0 0 10px; color:var(--primary)">Grafik Data</h3>
+        <canvas id="chartCanvas"></canvas>
+      </section>
+    </main>
+  </div>
+
+<script>
+/* Elements */
+const tabCamera = document.getElementById('tabCamera');
+const tabManual = document.getElementById('tabManual');
+const cameraSection = document.getElementById('cameraSection');
+const manualSection = document.getElementById('manualSection');
+
+const camera = document.getElementById('camera');
+const captureBtn = document.getElementById('captureBtn');
+const processCombinedBtn = document.getElementById('processCombinedBtn');
+const snapshot = document.getElementById('snapshot');
+const preview = document.getElementById('preview');
+const output = document.getElementById('output');
+const canvasTable = document.getElementById('canvasTable');
+const loading = document.getElementById('loading');
+const minConfidence = document.getElementById('minConfidence');
+const confLabel = document.getElementById('confLabel') || { textContent: "40%" };
+const statsText = document.getElementById('statsText');
+
+const manualTitle = document.getElementById('manualTitle');
+const manualInput = document.getElementById('manualInput');
+const processManualBtn = document.getElementById('processManualBtn');
+const clearManualBtn = document.getElementById('clearManualBtn');
+const manualDownloadBtn = document.getElementById('manualDownloadBtn');
+
+const chartContainer = document.getElementById('chartContainer');
+const chartCanvas = document.getElementById('chartCanvas');
+
+let ocrWorker = null;
+let imgDataUrl = "";
+let chartInstance = null;
+
+/* Tabs */
+function showCamera() { tabCamera.classList.add('active'); tabManual.classList.remove('active'); cameraSection.style.display = ''; manualSection.style.display = 'none'; }
+function showManual() { tabManual.classList.add('active'); tabCamera.classList.remove('active'); cameraSection.style.display = 'none'; manualSection.style.display = ''; }
+tabCamera.addEventListener('click', showCamera);
+tabManual.addEventListener('click', showManual);
+
+/* Confidence label */
+if (minConfidence) { confLabel.textContent = minConfidence.value + '%'; minConfidence.addEventListener('input', () => confLabel.textContent = minConfidence.value + '%'); }
+
+/* Tesseract worker */
+async function ensureWorker() {
+  if (!ocrWorker) {
+    ocrWorker = Tesseract.createWorker({
+      logger: m => {
+        if (m.status && m.progress) loading.textContent = `${m.status} ${(m.progress*100).toFixed(0)}%`;
+      }
+    });
+    loading.textContent = "Memuat engine OCR...";
+    await ocrWorker.load();
+    await ocrWorker.loadLanguage('eng');
+    await ocrWorker.initialize('eng');
+    loading.textContent = "";
+  }
+}
+
+/* Camera access */
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+  .then(stream => camera.srcObject = stream)
+  .catch(err => { console.log("Tidak bisa akses kamera: " + err); loading.textContent = "Tidak bisa mengakses kamera."; });
+
+/* Capture only: take snapshot and enable processing button */
+function takeSnapshot() {
+  const ctx = snapshot.getContext('2d');
+  snapshot.width = camera.videoWidth || 1280;
+  snapshot.height = camera.videoHeight || 720;
+  ctx.drawImage(camera, 0, 0, snapshot.width, snapshot.height);
+  imgDataUrl = snapshot.toDataURL("image/png");
+  preview.src = imgDataUrl;
+  preview.style.display = "block";
+  canvasTable.style.display = "none";
+  output.textContent = "";
+  statsText.textContent = `Ukuran gambar: ${snapshot.width} x ${snapshot.height}`;
+  processCombinedBtn.disabled = false;
+}
+captureBtn.addEventListener('click', takeSnapshot);
+
+/* Combined process (OCR once + detect lines + map words to cells) and auto-download Excel for camera flow */
+processCombinedBtn.addEventListener('click', async () => {
+  if (!imgDataUrl) return alert("Ambil foto terlebih dahulu.");
+  await runCombinedExtractionAndAutoDownload();
+});
+
+async function runCombinedExtractionAndAutoDownload() {
+  loading.textContent = "Memproses deteksi garis tabel...";
+  // Wait OpenCV
+  if (typeof cv === 'undefined' || !cv.ready) {
+    loading.textContent = "Menunggu OpenCV.js siap...";
+    await new Promise(r => setTimeout(r, 1500));
+    if (typeof cv === 'undefined' || !cv.ready) { loading.textContent = "OpenCV.js belum siap."; return; }
+  }
+
+  // prepare image
+  let img = new Image();
+  img.src = imgDataUrl;
+  await new Promise(res => img.onload = res);
+
+  canvasTable.width = img.width;
+  canvasTable.height = img.height;
+  canvasTable.style.display = "block";
+  let ctx = canvasTable.getContext('2d');
+  ctx.clearRect(0,0,canvasTable.width, canvasTable.height);
+  ctx.drawImage(img, 0, 0);
+
+  // OpenCV: grayscale + adaptiveThreshold
+  let src = cv.imread(canvasTable);
+  let gray = new cv.Mat(), bw = new cv.Mat(), horizontal = new cv.Mat(), vertical = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+  cv.adaptiveThreshold(gray, bw, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, 15, 10);
+
+  let horizontalsize = Math.max(1, Math.floor(bw.cols / 15));
+  let horizontalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(horizontalsize, 1));
+  cv.erode(bw, horizontal, horizontalStructure);
+  cv.dilate(horizontal, horizontal, horizontalStructure);
+
+  let verticalsize = Math.max(1, Math.floor(bw.rows / 15));
+  let verticalStructure = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(1, verticalsize));
+  cv.erode(bw, vertical, verticalStructure);
+  cv.dilate(vertical, vertical, verticalStructure);
+
+  let mask = new cv.Mat();
+  cv.add(horizontal, vertical, mask);
+
+  let contours = new cv.MatVector();
+  let hierarchy = new cv.Mat();
+  cv.findContours(mask, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+  let cells = [];
+  for (let i = 0; i < contours.size(); ++i) {
+    let rect = cv.boundingRect(contours.get(i));
+    if (rect.width > 30 && rect.height > 20 && rect.width * rect.height < src.cols * src.rows * 0.4) {
+      cells.push(rect);
+      ctx.strokeStyle = "rgba(255,159,64,0.95)";
+      ctx.lineWidth = Math.max(2, Math.round(Math.min(src.cols, src.rows) / 300));
+      ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+    }
+  }
+
+  cells.sort((a, b) => a.y === b.y ? a.x - b.x : a.y - b.y);
+  let rows = [];
+  let currentRow = [];
+  let thresholdY = Math.max(10, Math.floor(img.height * 0.02));
+  for (let i = 0; i < cells.length; i++) {
+    if (i === 0) currentRow.push(cells[i]);
+    else {
+      if (Math.abs(cells[i].y - cells[i-1].y) < thresholdY) currentRow.push(cells[i]);
+      else { rows.push(currentRow.slice()); currentRow = [cells[i]]; }
+    }
+  }
+  if (currentRow.length) rows.push(currentRow);
+
+  // OCR once
+  await ensureWorker();
+  loading.textContent = "Menjalankan OCR seluruh gambar (1x) ...";
+  const fullResult = await ocrWorker.recognize(imgDataUrl);
+  const wordsAll = (fullResult.data.words || []);
+  const confThreshold = parseInt(minConfidence ? minConfidence.value : 40, 10);
+  const words = wordsAll.filter(w => (typeof w.confidence === 'number' ? w.confidence >= confThreshold : true));
+
+  function pointInRect(x, y, rect) { return x >= rect.x && x <= (rect.x + rect.width) && y >= rect.y && y <= (rect.y + rect.height); }
+
+  let tableData = [];
+  for (let r = 0; r < rows.length; r++) {
+    let rowCells = rows[r];
+    rowCells.sort((a, b) => a.x - b.x);
+    let rowData = [];
+    for (let c = 0; c < rowCells.length; c++) {
+      let rect = rowCells[c];
+      let cellWords = words.filter(w => {
+        if (!w.bbox) return false;
+        let cx = (w.bbox.x0 + w.bbox.x1) / 2;
+        let cy = (w.bbox.y0 + w.bbox.y1) / 2;
+        return pointInRect(cx, cy, rect);
+      });
+      cellWords.sort((a, b) => (a.bbox.x0 + a.bbox.x1)/2 - (b.bbox.x0 + b.bbox.x1)/2);
+      let text = cellWords.map(w => w.text).join(' ').trim();
+      rowData.push(text);
+    }
+    tableData.push(rowData);
+    loading.textContent = `Mapping baris ${r+1} / ${rows.length} ...`;
+  }
+
+  loading.textContent = "";
+  output.textContent = tableData.map(row => row.join('\t')).join('\n');
+
+  // Auto-download Excel (camera flow)
+  try {
+    const ws = XLSX.utils.aoa_to_sheet(tableData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DataAI");
+    XLSX.writeFile(wb, "hasil_tabel_AI_garis.xlsx");
+  } catch (err) {
+    console.warn("Gagal auto-download:", err);
+  }
+
+  // Create chart if possible
+  if (tableData.length > 1 && tableData[0].length >= 2) {
+    const labels = tableData.slice(1).map(r => r[0]);
+    const values = tableData.slice(1).map(r => parseFloat(r[1]) || 0);
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(chartCanvas, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: tableData[0][1] || 'Nilai', data: values, backgroundColor: 'rgba(11,61,145,0.85)' }] },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+    chartContainer.style.display = "block";
+  } else {
+    chartContainer.style.display = "none";
+  }
+
+  // cleanup
+  src.delete(); gray.delete(); bw.delete(); horizontal.delete(); vertical.delete(); mask.delete(); contours.delete(); hierarchy.delete();
+}
+
+/* Manual input processing */
+processManualBtn.addEventListener('click', () => {
+  const raw = manualInput.value.trim();
+  if (!raw) return alert("Masukkan data manual terlebih dahulu.");
+  const lines = raw.split('\n').map(l => l.trim()).filter(l => l !== '');
+  let rows = [];
+  if (manualTitle.value && manualTitle.value.trim()) rows.push([manualTitle.value.trim()]);
+  for (let i = 0; i < lines.length; i++) rows.push(lines[i].split(/\s+/));
+  output.textContent = rows.map(r => r.join('\t')).join('\n');
+  manualDownloadBtn.disabled = false;
+
+  if (rows.length > 1 && rows[0].length >= 2) {
+    const labels = rows.slice(1).map(r => r[0]);
+    const values = rows.slice(1).map(r => parseFloat(r[1]) || 0);
+    if (chartInstance) chartInstance.destroy();
+    chartInstance = new Chart(chartCanvas, { type:'bar', data:{ labels, datasets:[{ label: rows[0][1] || 'Nilai', data: values, backgroundColor:'rgba(11,61,145,0.85)' }] }, options:{ responsive:true, scales:{ y:{ beginAtZero:true } } } });
+    chartContainer.style.display = "block";
+  } else chartContainer.style.display = "none";
+});
+
+/* Manual download */
+manualDownloadBtn.addEventListener('click', () => {
+  if (!output.textContent.trim()) return alert("Tidak ada data untuk diunduh.");
+  const rows = output.textContent.split('\n').map(r => r.split('\t'));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Data");
+  XLSX.writeFile(wb, "hasil_tabel_manual.xlsx");
+});
+
+/* Clear manual */
+clearManualBtn.addEventListener('click', () => { manualInput.value = ''; manualTitle.value = ''; manualDownloadBtn.disabled = true; });
+
+/* Helpers: reset/help */
+document.getElementById('btnReset').addEventListener('click', () => {
+  preview.style.display = "none";
+  canvasTable.style.display = "none";
+  output.textContent = "";
+  manualDownloadBtn.disabled = true;
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; chartContainer.style.display = "none"; }
+  loading.textContent = "";
+  imgDataUrl = "";
+});
+document.getElementById('btnHelp').addEventListener('click', () => {
+  alert("Petunjuk:\n1. Pilih 'Scan Kamera'.\n2. Tekan 'Ambil Foto' untuk memotret (tidak otomatis memproses).\n3. Tekan 'Ekstrak (OCR + Garis)' untuk menjalankan OCR+sambung ekstraksi garis (proses digabung) dan file Excel akan otomatis terunduh.\n4. Untuk input manual: pindah ke tab 'Input Manual', isi, lalu gunakan tombol 'Download Excel' di sana.");
+});
+
+/* Initialize */
+showCamera();
+</script>
+</body>
+</html>
